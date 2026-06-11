@@ -161,6 +161,10 @@ class Settings(BaseConfigSettings):
     ollama_model: str = "llama3.2:1b"
     ollama_timeout: int = 300
 
+    # LLM provider: "ollama" (local) or "groq" (cloud, free tier)
+    llm_provider: str = "ollama"
+    groq_api_key: str = ""
+
     # Jina AI embeddings configuration
     jina_api_key: str = ""
 
