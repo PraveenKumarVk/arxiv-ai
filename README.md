@@ -2,7 +2,7 @@
 
 > A production-grade RAG (Retrieval-Augmented Generation) system that automatically ingests daily arXiv CS.AI papers, indexes them with hybrid BM25 + semantic search, and answers research questions via a streaming LLM API — all running locally on your machine.
 
-![Architecture](static/week5_complete_rag.png)
+![Architecture](static/architecture.png)
 
 ---
 
