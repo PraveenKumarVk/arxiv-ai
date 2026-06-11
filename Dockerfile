@@ -21,6 +21,14 @@ ENV PYTHONUNBUFFERED=1
 ARG VERSION=0.1.0
 ENV APP_VERSION=$VERSION
 
+# System deps required by docling (PDF parsing)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    poppler-utils \
+    tesseract-ocr \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy the virtual environment from the base stage
