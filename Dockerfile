@@ -2,19 +2,12 @@ FROM ghcr.io/astral-sh/uv:python3.12-bookworm AS base
 
 WORKDIR /app
 
-# Copy configuration files
-COPY pyproject.toml uv.lock ./
-
-# UV_COMPILE_BYTECODE for generating .pyc files -> faster application startup.
-# UV_LINK_MODE=copy to silence warnings about not being able to use hard links
-# since the cache and sync target are on separate file systems.
+# UV_COMPILE_BYTECODE for faster startup; UV_LINK_MODE=copy for cross-filesystem compat
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 
 # Install dependencies
-RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=/app/uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=/app/pyproject.toml \
-    uv sync --frozen --no-dev
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
 
 # Copy source code
 COPY src /app/src
