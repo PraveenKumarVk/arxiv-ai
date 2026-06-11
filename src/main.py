@@ -67,8 +67,23 @@ async def lifespan(app: FastAPI):
     app.state.pdf_parser = make_pdf_parser_service()
     app.state.embeddings_service = make_embeddings_service()
     app.state.ollama_client = make_ollama_client()
-    app.state.langfuse_tracer = make_langfuse_tracer()
-    app.state.cache_client = make_cache_client(settings)
+
+    # Langfuse is optional — skip gracefully if keys are not configured
+    try:
+        app.state.langfuse_tracer = make_langfuse_tracer()
+        logger.info("Langfuse tracer initialized")
+    except Exception as e:
+        logger.warning(f"Langfuse tracer unavailable (tracing disabled): {e}")
+        app.state.langfuse_tracer = None
+
+    # Redis cache is optional — the API works without it, just slower on repeated queries
+    try:
+        app.state.cache_client = make_cache_client(settings)
+        logger.info("Redis cache initialized")
+    except Exception as e:
+        logger.warning(f"Redis cache unavailable (caching disabled): {e}")
+        app.state.cache_client = None
+
     logger.info("Services initialized: arXiv API client, PDF parser, OpenSearch, Embeddings, Ollama, Langfuse, Cache")
 
     logger.info("API ready")
