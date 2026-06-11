@@ -1,6 +1,5 @@
 [build]
-# Build from the existing multi-stage Dockerfile
-dockerfile = "Dockerfile"
+# Uses nixpacks.toml for system deps (poppler, tesseract) + uv install
 
 [deploy]
 # Railway injects PORT automatically; bind to it
