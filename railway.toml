@@ -1,0 +1,11 @@
+[build]
+# Build from the existing multi-stage Dockerfile
+dockerfile = "Dockerfile"
+
+[deploy]
+# Railway injects PORT automatically; bind to it
+startCommand = "uvicorn src.main:app --host 0.0.0.0 --port $PORT --workers 2"
+healthcheckPath = "/api/v1/health"
+healthcheckTimeout = 60
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
