@@ -14,7 +14,6 @@ from src.services.embeddings.factory import make_embeddings_service
 from src.services.langfuse.factory import make_langfuse_tracer
 from src.services.ollama.factory import make_ollama_client
 from src.services.opensearch.factory import make_opensearch_client
-from src.services.pdf_parser.factory import make_pdf_parser_service
 
 # Setup logging
 logging.basicConfig(
@@ -64,7 +63,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize other services (kept for future endpoints and notebook demos)
     app.state.arxiv_client = make_arxiv_client()
-    app.state.pdf_parser = make_pdf_parser_service()
+    app.state.pdf_parser = None  # PDF parsing runs in Airflow pipeline, not the API
     app.state.embeddings_service = make_embeddings_service()
     app.state.ollama_client = make_ollama_client()
 
