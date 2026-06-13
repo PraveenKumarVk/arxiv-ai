@@ -11,7 +11,6 @@ from src.services.embeddings.jina_client import JinaEmbeddingsClient
 from src.services.langfuse.client import LangfuseTracer
 from src.services.ollama.client import OllamaClient
 from src.services.opensearch.client import OpenSearchClient
-from src.services.pdf_parser.parser import PDFParserService
 
 
 @lru_cache
@@ -46,10 +45,6 @@ def get_arxiv_client(request: Request) -> ArxivClient:
     return request.app.state.arxiv_client
 
 
-def get_pdf_parser(request: Request) -> PDFParserService:
-    """Get PDF parser service from the request state."""
-    return request.app.state.pdf_parser
-
 
 def get_embeddings_service(request: Request) -> JinaEmbeddingsClient:
     """Get embeddings service from the request state."""
@@ -77,7 +72,6 @@ DatabaseDep = Annotated[BaseDatabase, Depends(get_database)]
 SessionDep = Annotated[Session, Depends(get_db_session)]
 OpenSearchDep = Annotated[OpenSearchClient, Depends(get_opensearch_client)]
 ArxivDep = Annotated[ArxivClient, Depends(get_arxiv_client)]
-PDFParserDep = Annotated[PDFParserService, Depends(get_pdf_parser)]
 EmbeddingsDep = Annotated[JinaEmbeddingsClient, Depends(get_embeddings_service)]
 OllamaDep = Annotated[OllamaClient, Depends(get_ollama_client)]
 LangfuseDep = Annotated[LangfuseTracer, Depends(get_langfuse_tracer)]
