@@ -123,6 +123,9 @@ class OpenSearchClient:
             return True
 
         except Exception as e:
+            if "403" in str(e) or "Forbidden" in str(e) or "bonsai_exception" in str(e):
+                logger.warning(f"Search pipeline creation skipped (managed cluster restriction): {e}")
+                return False
             logger.error(f"Error creating RRF pipeline: {e}")
             raise
 
