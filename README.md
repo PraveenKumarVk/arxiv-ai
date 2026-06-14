@@ -107,32 +107,26 @@ The system has two independently deployable layers:
 This system was built incrementally across 6 weeks, with each week's architecture documented in [`notebooks/`](notebooks/) and captured below.
 
 ### Week 1 — Infrastructure Setup
-![Week 1](static/week1_infra_setup.png)
 
 Docker Compose stack with FastAPI, PostgreSQL 16, OpenSearch 2.19, Airflow 3.0, and Ollama — all wired with health checks and persistent volumes.
 
 ### Week 2 — Data Ingestion Pipeline
-![Week 2](static/week2_data_ingestion_flow.png)
 
 Airflow DAG orchestrating arXiv API fetch → Docling PDF parsing → PostgreSQL storage. ArxivClient with rate limiting and retry logic; PDFParserService with OCR and table extraction.
 
 ### Week 3 — OpenSearch & BM25 Search
-![Week 3](static/week3_opensearch_flow.png)
 
 OpenSearch index with BM25 keyword retrieval. QueryBuilder, section-aware chunker, bulk indexing from the Airflow pipeline.
 
 ### Week 4 — Hybrid Search (BM25 + Vector)
-![Week 4](static/week4_hybrid_opensearch.png)
 
 Jina Embeddings v3 for passage and query encoding. Hybrid index combining BM25 scores and kNN similarity, fused with Reciprocal Rank Fusion (RRF) pipeline.
 
 ### Week 5 — Complete RAG Pipeline
-![Week 5](static/week5_complete_rag.png)
 
 LLM generation layer with Ollama integration. `/ask` and `/stream` endpoints, RAGPromptBuilder, context window management, Gradio streaming UI.
 
 ### Week 6 — Observability & Caching
-![Week 6](static/week6_monitoring_and_caching.png)
 
 Langfuse traces wrapping every RAG span. Redis exact-match cache keyed by SHA-256 of `(query, model, top_k, categories)`. Cache hits skip all 4 pipeline steps and return in < 5ms.
 
