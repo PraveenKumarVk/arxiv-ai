@@ -20,6 +20,7 @@ def make_redis_client(settings: Settings) -> redis.Redis:
             decode_responses=redis_settings.decode_responses,
             socket_timeout=redis_settings.socket_timeout,
             socket_connect_timeout=redis_settings.socket_connect_timeout,
+            ssl=getattr(redis_settings, "ssl", False),
             retry_on_timeout=True,
             retry_on_error=[redis.ConnectionError, redis.TimeoutError],
         )

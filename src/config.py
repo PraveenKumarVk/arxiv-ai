@@ -141,6 +141,7 @@ class RedisSettings(BaseConfigSettings):
     decode_responses: bool = True
     socket_timeout: int = 30
     socket_connect_timeout: int = 30
+    ssl: bool = False
 
     # Cache settings
     ttl_hours: int = 6  # Cache TTL in hours
