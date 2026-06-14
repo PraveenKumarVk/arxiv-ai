@@ -90,6 +90,7 @@ async def seed():
                 authors=p["authors"],
                 categories=p["categories"],
                 published_date=datetime.strptime(p["published_date"], "%Y-%m-%d"),
+                pdf_url=f"https://arxiv.org/pdf/{p['arxiv_id']}",
                 raw_text=p["abstract"],
             )
             session.add(paper)
