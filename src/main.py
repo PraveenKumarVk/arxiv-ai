@@ -95,8 +95,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="arXiv Paper Curator API",
-    description="Personal arXiv CS.AI paper curator with RAG capabilities",
+    description=(
+        "Personal arXiv CS.AI paper curator with RAG capabilities. "
+        "Built by [Praveen Kumar Varkala](https://github.com/PraveenKumarVk). "
+        "Source: https://github.com/PraveenKumarVk/arxiv-ai"
+    ),
     version=os.getenv("APP_VERSION", "0.1.0"),
+    contact={"name": "Praveen Kumar Varkala", "email": "reachpraveenvk@gmail.com"},
     lifespan=lifespan,
 )
 

@@ -285,3 +285,7 @@ setup_environment
 - Up to 15 `cs.AI` papers per run, retried 3× with exponential backoff
 - 600-word chunks, 100-word overlap, section-boundary aware
 - Bulk-indexed with 1024-dim passage embeddings into OpenSearch
+
+---
+
+Built by **[Praveen Kumar Varkala](https://github.com/PraveenKumarVk)** · [reachpraveenvk@gmail.com](mailto:reachpraveenvk@gmail.com)

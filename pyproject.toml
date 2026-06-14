@@ -19,7 +19,12 @@ dependencies = [
     "langfuse>=2.0.0,<3.0.0",
     "redis>=6.4.0",
 ]
+authors = [
+    { name = "Praveen Kumar Varkala", email = "reachpraveenvk@gmail.com" }
+]
 readme = "README.md"
+license = { text = "MIT" }
+keywords = ["rag", "arxiv", "llm", "opensearch", "fastapi", "airflow"]
 
 [dependency-groups]
 dev = [
