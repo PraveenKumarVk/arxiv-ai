@@ -1,69 +1,140 @@
 # arXiv AI Paper Curator
 
-> A production-grade RAG (Retrieval-Augmented Generation) system that automatically ingests daily arXiv CS.AI papers, indexes them with hybrid BM25 + semantic search, and answers research questions via a streaming LLM API — all running locally on your machine.
+> A production-grade RAG system that ingests daily arXiv CS.AI papers, indexes them with hybrid BM25 + semantic search, and answers research questions via a streaming LLM API — deployed on free cloud infrastructure.
 
-![Architecture](static/architecture.png)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-arxiv--ai.onrender.com-brightgreen)](https://arxiv-ai.onrender.com/docs)
+[![Health](https://img.shields.io/badge/Health-/api/v1/health-blue)](https://arxiv-ai.onrender.com/api/v1/health)
+[![Python](https://img.shields.io/badge/Python-3.12-blue)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688)](https://fastapi.tiangolo.com/)
+
+**Live API:** https://arxiv-ai.onrender.com/docs
 
 ---
 
 ## What It Does
 
-Ask a natural language question like _"What are the latest approaches to graph neural networks for molecules?"_ and get a cited, context-grounded answer sourced directly from arXiv papers ingested that morning — with full observability, sub-second cached responses, and a streamed Gradio UI.
+Ask a natural language question like _"What are the latest approaches to graph neural networks?"_ and get a cited, context-grounded answer sourced from arXiv papers — with hybrid BM25 + semantic retrieval, streaming LLM generation, Redis caching, and full Langfuse observability.
 
-The system runs end-to-end without any cloud LLM dependencies: PDFs are parsed locally with Docling, embeddings come from Jina AI, and generation is handled by Ollama (Llama 3.2, Qwen 2.5, etc.).
+```bash
+curl -X POST https://arxiv-ai.onrender.com/api/v1/ask \
+  -H "Content-Type: application/json" \
+  -d '{"query": "retrieval augmented generation for code", "top_k": 5}'
+```
 
 ---
 
 ## Architecture
 
-```
-arXiv API ──► Airflow DAG ──► PDF Parser (Docling) ──► PostgreSQL
-                                                           │
-                                                    Section-aware
-                                                      Chunker
-                                                           │
-                                              Jina Embeddings v3 (1024-dim)
-                                                           │
-                                                    OpenSearch 2.19
-                                                  (BM25 + kNN + RRF)
-                                                           │
-FastAPI (/ask, /stream) ◄──── Ollama (local LLM) ◄────────┘
-    │                                                    
-    ├── Redis Cache (6h TTL, exact-match)
-    ├── Langfuse Tracer (every RAG span)
-    └── Gradio UI (SSE streaming)
-```
+![Architecture](static/architecture.png)
 
-**Weekly build log:** [`notebooks/`](notebooks/) documents the system being built from scratch across 6 weeks — from raw API calls to a fully observed, cached RAG pipeline.
+The system has two independently deployable layers:
+
+**Data Pipeline (Airflow)** — runs Mon–Fri at 6 AM UTC. Fetches new `cs.AI` papers from arXiv, parses PDFs with Docling (OCR, table extraction), chunks them section-aware, generates Jina passage embeddings, and bulk-indexes into OpenSearch + PostgreSQL.
+
+**Query API (FastAPI)** — stateless, cloud-deployed. Accepts natural language queries, embeds them with Jina, retrieves via BM25/kNN/hybrid search, builds context-grounded prompts, and streams answers from Groq (cloud) or Ollama (local).
 
 ---
 
-## Key Features
+## Cloud Deployment Stack
 
-- **Automated daily ingestion** — Airflow DAG runs Mon–Fri at 6 AM UTC, fetches up to 15 new `cs.AI` papers, downloads PDFs concurrently (rate-limited), parses them with OCR/table support, and stores structured content in PostgreSQL.
-- **Hybrid retrieval** — OpenSearch hybrid index combines BM25 keyword scoring with 1024-dim Jina vector search, fused via Reciprocal Rank Fusion (RRF). Degrades gracefully to BM25 if embeddings are unavailable.
-- **Section-aware chunking** — Papers are split into 600-word overlapping chunks that respect document section boundaries, preserving context for retrieval.
-- **Streaming RAG API** — `/ask` returns a complete JSON response; `/stream` pushes Server-Sent Events for token-by-token UI streaming. Both check Redis for exact-match cache hits first.
-- **Full observability** — Every RAG request is traced in Langfuse: embedding latency, search hits, prompt construction, generation time, and token counts — all in a self-hosted dashboard.
-- **One-command stack** — `make start` boots the entire system (API, PostgreSQL, OpenSearch, Redis, Airflow, Ollama, Langfuse) via Docker Compose.
+| Service | Provider | Free Tier |
+|---------|----------|-----------|
+| FastAPI (RAG API) | [Render](https://render.com) | 512MB, spins down on idle |
+| PostgreSQL | [Render](https://render.com) | 1GB storage |
+| OpenSearch (BM25 + kNN) | [Bonsai.io](https://bonsai.io) | 10k docs, 125MB |
+| Redis cache | [Upstash](https://upstash.com) | 10k req/day |
+| LLM (Groq API) | [Groq](https://console.groq.com) | Free tier, llama-3.1-8b |
+| Embeddings | [Jina AI](https://jina.ai) | Free tier |
+
+> **Note:** The free Render instance spins down after 15 minutes of inactivity — first request after idle takes ~50s to cold-start.
 
 ---
 
 ## Tech Stack
 
 | Layer | Technology |
-|---|---|
+|-------|-----------|
 | **API** | FastAPI 0.115, Python 3.12, `uv` package manager |
-| **LLM** | Ollama (Llama 3.2 1B/3B, Llama 3.1 8B, Qwen 2.5 7B) |
+| **LLM** | Groq API (llama-3.1-8b-instant) · Ollama for local dev |
 | **Embeddings** | Jina Embeddings v3 — 1024-dim, task-aware (query vs passage) |
-| **Vector + Keyword Search** | OpenSearch 2.19 — hybrid BM25/kNN index with RRF pipeline |
-| **PDF Parsing** | Docling + Tesseract OCR + Poppler (table extraction) |
-| **Data Pipeline** | Apache Airflow 2.10 — PythonOperator DAG, retry logic, concurrency control |
-| **Database** | PostgreSQL 16 — paper metadata, full text, chunk storage via SQLAlchemy |
-| **Cache** | Redis 7 — SHA-256 keyed exact-match cache, 6h TTL, LRU eviction |
-| **Observability** | Langfuse v2 (self-hosted) + ClickHouse for analytics |
-| **UI** | Gradio 4 — real-time streaming chat with source links |
-| **Infra** | Docker Compose, Makefile, pre-commit hooks, Ruff, mypy |
+| **Search** | OpenSearch 2.19 — hybrid BM25 + kNN index, RRF fusion |
+| **PDF Parsing** | Docling + Tesseract OCR + Poppler (Airflow pipeline only) |
+| **Data Pipeline** | Apache Airflow 2.10 — DAG with retry, concurrency control |
+| **Database** | PostgreSQL 16 — paper metadata, full text, SQLAlchemy ORM |
+| **Cache** | Redis 7 — SHA-256 keyed exact-match cache, 6h TTL |
+| **Observability** | Langfuse v2 — traces every RAG span (embed → search → generate) |
+| **UI** | Gradio 4 — real-time SSE streaming chat |
+| **Infra** | Docker Compose, Dockerfile, pre-commit, Ruff, mypy |
+
+---
+
+## Key Features
+
+- **Hybrid retrieval** — OpenSearch index combines BM25 keyword scoring with 1024-dim Jina vector search, fused via Reciprocal Rank Fusion. Degrades gracefully to BM25 on managed clusters.
+- **Section-aware chunking** — papers split into 600-word overlapping chunks that respect document section boundaries.
+- **Streaming RAG** — `/ask` returns complete JSON; `/stream` pushes Server-Sent Events for token-by-token UI streaming. Both check Redis cache first.
+- **LLM-provider agnostic** — `LLM_PROVIDER=groq` or `LLM_PROVIDER=ollama` swap the backend with no code changes. Groq uses OpenAI-compatible SSE; Ollama uses NDJSON — both normalized to the same interface.
+- **Full observability** — every RAG request traced in Langfuse: embedding latency, search hit scores, prompt construction, generation time, token counts.
+
+---
+
+## API Reference
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/health` | GET | Health check — PostgreSQL, OpenSearch, LLM |
+| `/api/v1/hybrid-search` | POST | BM25 or hybrid vector search with highlights |
+| `/api/v1/ask` | POST | RAG Q&A — retrieves chunks, calls LLM, caches result |
+| `/api/v1/stream` | POST | Same as `/ask` but streams tokens via SSE |
+
+**`/ask` request:**
+```json
+{
+  "query": "What is chain-of-thought prompting?",
+  "top_k": 5,
+  "use_hybrid": true,
+  "model": "llama-3.1-8b-instant",
+  "categories": ["cs.AI"]
+}
+```
+
+**Response:** `answer`, `sources` (arXiv URLs), `chunks_used`, `search_mode`, `cached`.
+
+---
+
+## Build Journey
+
+This system was built incrementally across 6 weeks, with each week's architecture documented in [`notebooks/`](notebooks/) and captured below.
+
+### Week 1 — Infrastructure Setup
+![Week 1](static/week1_infra_setup.png)
+
+Docker Compose stack with FastAPI, PostgreSQL 16, OpenSearch 2.19, Airflow 3.0, and Ollama — all wired with health checks and persistent volumes.
+
+### Week 2 — Data Ingestion Pipeline
+![Week 2](static/week2_data_ingestion_flow.png)
+
+Airflow DAG orchestrating arXiv API fetch → Docling PDF parsing → PostgreSQL storage. ArxivClient with rate limiting and retry logic; PDFParserService with OCR and table extraction.
+
+### Week 3 — OpenSearch & BM25 Search
+![Week 3](static/week3_opensearch_flow.png)
+
+OpenSearch index with BM25 keyword retrieval. QueryBuilder, section-aware chunker, bulk indexing from the Airflow pipeline.
+
+### Week 4 — Hybrid Search (BM25 + Vector)
+![Week 4](static/week4_hybrid_opensearch.png)
+
+Jina Embeddings v3 for passage and query encoding. Hybrid index combining BM25 scores and kNN similarity, fused with Reciprocal Rank Fusion (RRF) pipeline.
+
+### Week 5 — Complete RAG Pipeline
+![Week 5](static/week5_complete_rag.png)
+
+LLM generation layer with Ollama integration. `/ask` and `/stream` endpoints, RAGPromptBuilder, context window management, Gradio streaming UI.
+
+### Week 6 — Observability & Caching
+![Week 6](static/week6_monitoring_and_caching.png)
+
+Langfuse traces wrapping every RAG span. Redis exact-match cache keyed by SHA-256 of `(query, model, top_k, categories)`. Cache hits skip all 4 pipeline steps and return in < 5ms.
 
 ---
 
@@ -76,7 +147,7 @@ arxiv-ai/
 │   ├── config.py                  # Pydantic Settings — all config via env vars
 │   ├── routers/
 │   │   ├── ask.py                 # /ask (JSON) and /stream (SSE) RAG endpoints
-│   │   ├── hybrid_search.py       # /hybrid-search — paginated BM25/vector search
+│   │   ├── hybrid_search.py       # /hybrid-search — BM25/vector/hybrid search
 │   │   └── ping.py                # /health — checks all downstream services
 │   ├── services/
 │   │   ├── arxiv/                 # arXiv Atom API client
@@ -84,45 +155,42 @@ arxiv-ai/
 │   │   ├── embeddings/            # Jina async embeddings client
 │   │   ├── indexing/              # HybridIndexingService + TextChunker
 │   │   ├── opensearch/            # OpenSearch client, query builder, index config
-│   │   ├── ollama/                # Ollama client + RAG prompt builder
-│   │   ├── cache/                 # Redis exact-match cache client
+│   │   ├── ollama/                # OllamaClient + GroqClient + RAGPromptBuilder
+│   │   ├── cache/                 # Redis exact-match cache
 │   │   └── langfuse/              # RAGTracer — wraps every pipeline span
 │   ├── models/                    # SQLAlchemy ORM models
-│   ├── schemas/                   # Pydantic request/response schemas
-│   └── gradio_app.py              # Gradio UI component (streaming consumer)
+│   └── schemas/                   # Pydantic request/response schemas
 ├── airflow/
-│   ├── dags/
-│   │   ├── arxiv_paper_ingestion.py   # Main DAG: setup→fetch→index→report→cleanup
-│   │   └── arxiv_ingestion/           # Modular task functions
-│   │       ├── setup.py               # Service health checks
-│   │       ├── fetching.py            # arXiv API fetch + PDF download
-│   │       ├── indexing.py            # Chunking + embedding + OpenSearch bulk index
-│   │       └── reporting.py           # Daily run statistics
-│   └── Dockerfile                 # Custom Airflow image with project deps
+│   └── dags/
+│       ├── arxiv_paper_ingestion.py   # Main DAG: sync→fetch→index→report→cleanup
+│       └── arxiv_ingestion/
+│           ├── fetching.py            # arXiv API + concurrent PDF download
+│           ├── indexing.py            # Chunking + embedding + OpenSearch bulk
+│           └── reporting.py          # Daily run statistics
 ├── notebooks/                     # Week-by-week experiment notebooks (weeks 1–6)
-├── tests/                         # Pytest suites: unit, API, integration
+├── scripts/
+│   └── seed_demo_data.py          # Seeds 50 cs.AI papers for demo deployment
+├── tests/                         # Pytest: unit, API, integration
 ├── compose.yml                    # Full Docker Compose stack (10 services)
-├── gradio_launcher.py             # Standalone Gradio launcher
-├── Makefile                       # Dev workflow shortcuts
+├── Dockerfile                     # Production image (no torch/docling)
 └── pyproject.toml                 # uv/ruff/mypy/pytest config
 ```
 
 ---
 
-## Getting Started
+## Local Development
 
 ### Prerequisites
-
 - Docker + Docker Compose
-- GNU Make
-- Jina AI API key — [free tier available](https://jina.ai/embeddings) (required for hybrid search; BM25-only works without it)
-- Python 3.12 + [uv](https://github.com/astral-sh/uv) for local dev outside Docker
+- Python 3.12 + [uv](https://github.com/astral-sh/uv)
+- Jina AI API key (free tier at [jina.ai](https://jina.ai))
+- Groq API key (free tier at [console.groq.com](https://console.groq.com)) or Ollama installed locally
 
 ### 1. Configure environment
 
 ```bash
 cp .env.example .env
-# Set JINA_API_KEY and optionally LANGFUSE keys
+# Set JINA_API_KEY, GROQ_API_KEY (or leave LLM_PROVIDER=ollama)
 ```
 
 ### 2. Start the full stack
@@ -133,107 +201,67 @@ make status       # verify containers are healthy
 make logs         # follow aggregated logs
 ```
 
-Services come up at:
-
 | Service | URL |
-|---|---|
+|---------|-----|
 | FastAPI docs | http://localhost:8000/docs |
-| Gradio UI | `python gradio_launcher.py` → http://localhost:7861 |
+| Gradio UI | http://localhost:7861 |
 | Airflow | http://localhost:8080 |
 | Langfuse | http://localhost:3000 |
 | OpenSearch Dashboards | http://localhost:5601 |
 
-### 3. Ask a question
-
-```bash
-# BM25 search
-curl -X POST http://localhost:8000/api/v1/ask \
-  -H "Content-Type: application/json" \
-  -d '{"query": "transformers for time series forecasting", "top_k": 5}'
-
-# Hybrid search (requires JINA_API_KEY)
-curl -X POST http://localhost:8000/api/v1/hybrid-search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "diffusion models for protein folding", "use_hybrid": true, "size": 5}'
-```
-
-### 4. Local development (without Docker for the API)
+### 3. Local dev without Docker (API only)
 
 ```bash
 uv sync
-docker compose up postgres redis opensearch ollama -d
-uv run uvicorn src.main:app --reload --port 8000
+docker compose up postgres redis opensearch -d
+LLM_PROVIDER=groq GROQ_API_KEY=... uv run uvicorn src.main:app --reload
+```
+
+### 4. Try it
+
+```bash
+# Search papers
+curl -X POST http://localhost:8000/api/v1/hybrid-search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "diffusion models for protein folding", "use_hybrid": true}'
+
+# Ask a question
+curl -X POST http://localhost:8000/api/v1/ask \
+  -H "Content-Type: application/json" \
+  -d '{"query": "How does RLHF work?", "top_k": 5}'
 ```
 
 ---
 
-## API Reference
+## Cloud Deployment (Render + Bonsai + Upstash)
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/v1/health` | GET | Health check — pings PostgreSQL, OpenSearch, and Ollama |
-| `/api/v1/hybrid-search` | POST | Paginated search with BM25 or hybrid retrieval, with highlights |
-| `/api/v1/ask` | POST | RAG Q&A — retrieves chunks, builds prompt, calls Ollama, caches result |
-| `/api/v1/stream` | POST | Same as `/ask` but streams tokens via Server-Sent Events |
-
-**`/ask` request body:**
-
-```json
-{
-  "query": "What is chain-of-thought prompting?",
-  "top_k": 5,
-  "use_hybrid": true,
-  "model": "llama3.2:1b",
-  "categories": ["cs.AI"]
-}
-```
-
-**Response includes:** `answer`, `sources` (arXiv PDF URLs), `chunks_used`, `search_mode`.
-
----
-
-## Data Pipeline (Airflow DAG)
-
-The `arxiv_paper_ingestion` DAG runs Monday–Friday and orchestrates:
+The API is deployed without Docling or torch — PDF parsing runs in the Airflow pipeline, not in the API image. This keeps the Docker image under 512MB.
 
 ```
-setup_environment
-    └── fetch_daily_papers          # arXiv API → download PDFs (concurrent, rate-limited)
-            └── index_papers_hybrid # Docling parse → section chunker → Jina embed → OpenSearch bulk
-                    └── generate_daily_report
-                            └── cleanup_temp_files
+LLM_PROVIDER=groq
+GROQ_API_KEY=...
+JINA_API_KEY=...
+POSTGRES_DATABASE_URL=postgresql://...
+OPENSEARCH__HOST=https://user:pass@cluster.bonsaisearch.net
+REDIS__HOST=...upstash.io
+REDIS__PORT=6379
+REDIS__PASSWORD=...
+REDIS__SSL=true
+LANGFUSE__ENABLED=false
 ```
 
-- Fetches up to 15 `cs.AI` papers from the previous day
-- Retries failed downloads up to 3× with exponential backoff
-- Chunking: 600 words, 100-word overlap, section-boundary aware
-- Bulk-indexes chunks with embeddings into OpenSearch
-
----
-
-## Observability
-
-Every `/ask` and `/stream` request generates a Langfuse trace with nested spans:
-
-1. `embedding` — Jina query embedding latency
-2. `search` — OpenSearch hit count and scores
-3. `prompt_construction` — chunk selection and prompt size
-4. `generation` — Ollama model, token count, latency
-
-Redis cache key is a SHA-256 hash of `(query, model, top_k, use_hybrid, categories)`. Cache hits skip steps 1–4 entirely and return in < 5ms.
+See [`.env.example`](.env.example) for the full list.
 
 ---
 
 ## Testing
 
 ```bash
-uv run pytest                    # all tests
-uv run pytest --cov=src          # with HTML coverage report
-uv run pytest tests/unit/        # unit tests only
-uv run pytest tests/integration/ # integration (requires running services)
+uv run pytest                     # all tests
+uv run pytest --cov=src           # with coverage
+uv run pytest tests/unit/         # unit only
+uv run pytest tests/integration/  # requires running services
 ```
-
-Linting and type checks:
 
 ```bash
 uv run ruff check --fix && uv run ruff format
@@ -242,15 +270,18 @@ uv run mypy src/
 
 ---
 
-## Development Journey
+## Airflow DAG
 
-This project was built incrementally across 6 weeks, documented in [`notebooks/`](notebooks/):
+The `arxiv_paper_ingestion` DAG runs Mon–Fri and orchestrates:
 
-| Week | Focus |
-|---|---|
-| Week 1 | Infrastructure setup — Docker, PostgreSQL, FastAPI skeleton |
-| Week 2 | arXiv data ingestion — API client, PDF downloads, Airflow DAG |
-| Week 3 | OpenSearch integration — BM25 indexing, query builder |
-| Week 4 | Hybrid search — Jina embeddings, kNN index, RRF fusion |
-| Week 5 | Complete RAG — Ollama integration, `/ask` endpoint, Gradio UI |
-| Week 6 | Observability — Langfuse tracing, Redis caching, monitoring |
+```
+setup_environment
+    └── fetch_daily_papers          # arXiv API → PDF download (concurrent, rate-limited)
+            └── index_papers_hybrid # Docling parse → section chunk → Jina embed → OS bulk
+                    └── generate_daily_report
+                            └── cleanup_temp_files
+```
+
+- Up to 15 `cs.AI` papers per run, retried 3× with exponential backoff
+- 600-word chunks, 100-word overlap, section-boundary aware
+- Bulk-indexed with 1024-dim passage embeddings into OpenSearch
