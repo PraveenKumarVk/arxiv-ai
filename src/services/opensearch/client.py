@@ -264,10 +264,18 @@ class OpenSearchClient:
             "highlight": bm25_search_body["highlight"],
         }
 
-        # Execute search with RRF pipeline
-        response = self.client.search(
-            index=self.index_name, body=search_body, params={"search_pipeline": HYBRID_RRF_PIPELINE["id"]}
-        )
+        # Execute search — try RRF pipeline first, fall back to BM25-only kNN if blocked
+        try:
+            response = self.client.search(
+                index=self.index_name, body=search_body, params={"search_pipeline": HYBRID_RRF_PIPELINE["id"]}
+            )
+        except Exception as e:
+            if "403" in str(e) or "Forbidden" in str(e) or "bonsai_exception" in str(e) or "400" in str(e):
+                logger.warning(f"RRF pipeline unavailable, falling back to BM25: {e}")
+                return self._search_bm25_only(
+                    query=query, size=size, from_=0, categories=categories, latest=False
+                )
+            raise
 
         results = {"total": response["hits"]["total"]["value"], "hits": []}
 
